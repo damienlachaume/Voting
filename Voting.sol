@@ -81,7 +81,6 @@ contract Voting is Ownable {
      */
     function setWorkflowStatus(WorkflowStatus _workflowStatus) public onlyOwner {
         require(_workflowStatus > currentWorkflowStatus, "you cannot go back to a previous status, in case of problem you have to reset the vote process");
-        require(_workflowStatus != WorkflowStatus.VotesTallied, "the status VotesTallied is automatically updated when votes have been counted");
         WorkflowStatus previousWorkflowStatus = currentWorkflowStatus;
         currentWorkflowStatus = _workflowStatus;
         emit WorkflowStatusChange(previousWorkflowStatus, currentWorkflowStatus);
@@ -127,15 +126,13 @@ contract Voting is Ownable {
      * Point 1
      * L'administrateur du vote enregistre une liste blanche d'électeurs identifiés par leur adresse Ethereum
      */
-    function setVoter(address _address, bool _isRegistered) external onlyOwner {
+    function registerVoter(address _address) external onlyOwner {
         require(currentWorkflowStatus == WorkflowStatus.RegisteringVoters, "you can set voter only during the registering period");
-        Voter memory voter = Voter(_isRegistered, false, 0);
+        require(voters[_address].isRegistered != true, "already registered");
+        Voter memory voter = Voter(true, false, 0);
         voters[_address] = voter;
         
-        // Cas où l'électeur est whitelisté 
-        if (_isRegistered) {
-            emit VoterRegistered(_address);
-        }
+        emit VoterRegistered(_address);
     }
 
     /**
@@ -180,35 +177,13 @@ contract Voting is Ownable {
         voters[msg.sender].hasVoted = true;
 
         // Incrémentation du nombre de vote pour la proposition
-        proposals[_proposalId].voteCount += 1;
+        proposals[_proposalId].voteCount++;
 
-        emit Voted(msg.sender, _proposalId);
-    }
-
-    /**
-     * Point 9
-     * L'administrateur du vote comptabilise les votes
-     * Permet de passer le workflow status à "VotesTallied"
-     */
-    function setWinningProposalId() external onlyOwner {
-        require(currentWorkflowStatus == WorkflowStatus.VotingSessionEnded, "You can only set winning proposal when voting session has ended");
-        
-        uint maxVoteCount = 0;
-        uint winningProposalIdTmp = 0;
-        
-        for (uint i = 0; i < proposals.length; i++) {
-            if (proposals[i].voteCount > maxVoteCount) {
-                winningProposalIdTmp = i;
-                maxVoteCount = proposals[i].voteCount;
-            }
+        if (proposals[_proposalId].voteCount > proposals[winningProposalId].voteCount) {
+            winningProposalId = _proposalId;
         }
 
-        winningProposalId = winningProposalIdTmp;
-        
-        // MAJ du Workflow Status à VotesTallied
-        WorkflowStatus previousWorkflowStatus = currentWorkflowStatus;
-        currentWorkflowStatus = WorkflowStatus.VotesTallied;
-        emit WorkflowStatusChange(previousWorkflowStatus, WorkflowStatus.VotesTallied);
+        emit Voted(msg.sender, _proposalId);
     }
 
     /**
